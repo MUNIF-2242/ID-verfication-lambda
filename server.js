@@ -734,6 +734,73 @@ app.all("/bkash/callback", (req, res) => {
   res.end();
 });
 
+app.post("/nid-backside-detect", async (req, res) => {
+  const { imageUrl } = req.body;
+
+  if (!imageUrl) {
+    return res
+      .status(400)
+      .json({ success: false, message: "No image URL provided." });
+  }
+
+  const bucketName = process.env.YOUR_S3_BUCKET_NAME;
+  const key = imageUrl.split("/").pop();
+
+  if (!key) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid image URL provided." });
+  }
+
+  const params = {
+    Image: {
+      S3Object: {
+        Bucket: bucketName,
+        Name: key,
+      },
+    },
+  };
+
+  try {
+    // Detect text using AWS Rekognition
+    const rekognitionData = await rekognition.detectText(params).promise();
+
+    if (
+      rekognitionData.TextDetections &&
+      rekognitionData.TextDetections.length > 0
+    ) {
+      // Filter for the specific text "Blood Group:"
+      const detectedBloodGroupText = rekognitionData.TextDetections.filter(
+        (text) => text.DetectedText && text.DetectedText.includes("Blood")
+      );
+
+      if (detectedBloodGroupText.length > 0) {
+        // Assuming we want only the first match
+        res.json({
+          success: true,
+          message: "NID back side detected successfully.",
+        });
+      } else {
+        res.json({
+          success: false,
+          message: "Failed to detect NID back side",
+        });
+      }
+    } else {
+      res.json({
+        success: false,
+        message: "No text detected in the back side of NID image.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while detecting NID back side",
+    });
+  }
+});
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
